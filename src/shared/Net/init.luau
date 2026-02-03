@@ -1,7 +1,6 @@
 --!strict
 --By: @rancidmilk1.5
 --Minor changes by: @_ayoon
-local ExperienceStateRecordingService = game:GetService("ExperienceStateRecordingService")
 local RunService = game:GetService("RunService")
 
 type RunContext = "Client" | "Server"
@@ -15,16 +14,16 @@ local unreliableRemoteEvent = isClient and script:FindFirstChildOfClass("Unrelia
 	or Instance.new("UnreliableRemoteEvent", script)
 local remoteEvent = script:FindFirstChildOfClass("RemoteEvent") or Instance.new("RemoteEvent", script)
 local remoteFunc = script:FindFirstChildOfClass("RemoteFunction") or Instance.new("RemoteFunction", script)
---TODO: Faire Net.Client et Net.Server
 
-local NetClient = {}
-local NetServer = {}
+local Net = { Client = {}, Server = {} }
+
 local Ports = {} :: { [string]: Signal.Signal }
 local Callbacks = {} :: { [string]: (...any) -> ...any }
 
 local function HandleRemoteFired(...: any)
 	local args = { ... }
-	local portId = if RunContext == "Client" then table.remove(args, 1) else table.remove(args, 2)
+	local argStart = if RunContext == "Client" then 1 else 2
+	local portId = table.remove(args, argStart)
 
 	assert(typeof(portId) == "string", "Invalid port id")
 	local port = Ports[portId]
@@ -89,6 +88,7 @@ end
 local function _request(player: Player?, portId: string, timeout: number?, ...: any?): any
 	local args = nil
 	timeout = timeout or 10
+
 	task.spawn(function(...)
 		if RunContext == "Client" then
 			remoteFunc.Parent = script
@@ -112,21 +112,21 @@ local function _request(player: Player?, portId: string, timeout: number?, ...: 
 end
 
 if isClient then
-	NetClient.Request = function(portId: string, timeout: number?, ...: any?): typeof(_request)
+	Net.Client.Request = function(portId: string, timeout: number?, ...: any?): ...any?
 		return _request(nil, portId, timeout, ...)
 	end
 
-	NetClient.SendAsync = function(portId: string, ...: any?): ()
+	Net.Client.SendAsync = function(portId: string, ...: any?): ()
+		return _sendAsync(nil, portId, ...)
+	end
+
+	Net.Client.SendUnsafeAsync = function(portId: string, ...: any?): ()
 		return _sendUnsafeAsync(nil, portId, ...)
 	end
 
-	NetClient.SendUnsafeAsync = function(portId: string, ...: any?): ()
-		return _sendUnsafeAsync(nil, portId, ...)
-	end
-
-	NetClient.HandleRequest = _handleRequest
-	NetClient.Connect = _connect
-	NetClient.Wait = _wait
+	Net.Client.HandleRequest = _handleRequest
+	Net.Client.Connect = _connect
+	Net.Client.Wait = _wait
 
 	remoteFunc.OnClientInvoke = HandleInvocation
 	remoteEvent.OnClientEvent:Connect(HandleRemoteFired)
@@ -136,25 +136,25 @@ if isClient then
 	remoteEvent.Parent = nil
 	remoteFunc.Parent = nil
 else
-	NetServer.Request = function(player: Player, portId: string, timeout: number?, ...: any?): typeof(_request)
+	Net.Server.Request = function(player: Player, portId: string, timeout: number?, ...: any?): ...any?
 		return _request(player, portId, timeout, ...)
 	end
 
-	NetServer.SendAsync = function(player: Player, portId: string, ...: any?): ()
+	Net.Server.SendAsync = function(player: Player, portId: string, ...: any?): ()
+		return _sendAsync(player, portId, ...)
+	end
+
+	Net.Server.SendUnsafeAsync = function(player: Player, portId: string, ...: any?): ()
 		return _sendUnsafeAsync(player, portId, ...)
 	end
 
-	NetServer.SendUnsafeAsync = function(player: Player, portId: string, ...: any?): ()
-		return _sendUnsafeAsync(player, portId, ...)
-	end
-
-	NetServer.HandleRequest = _handleRequest
-	NetServer.Connect = _connect
-	NetServer.Wait = _wait
+	Net.Server.HandleRequest = _handleRequest
+	Net.Server.Connect = _connect
+	Net.Server.Wait = _wait
 
 	remoteFunc.OnServerInvoke = HandleInvocation
 	remoteEvent.OnServerEvent:Connect(HandleRemoteFired)
 	unreliableRemoteEvent.OnServerEvent:Connect(HandleRemoteFired)
 end
 
-return if RunContext == "Server" then NetServer else NetClient
+return Net

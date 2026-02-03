@@ -1,20 +1,29 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Net = require(ReplicatedStorage.Shared.Net)
-print("hey from server")
+local Nayt = require(ReplicatedStorage.Shared.Nayt)
+local Sera = require(ReplicatedStorage.Shared.Nayt.Sera)
 
-Net.Connect("portId", function(Player: Player, ...)
-	print(`Player {Player.Name} fired portId`)
-	print("params: ", ...)
+local schema = Sera.Schema({
+	["1"] = Sera.String8,
+	["2"] = Sera.Int16,
+	["3"] = Sera.Uint32,
+	["4"] = Sera.Vector3,
+})
+
+local rem = Nayt.new("NaytPort", "Event", false, schema)
+
+local dataToSend = {
+	["1"] = "HELLO",
+	["2"] = -541,
+	["3"] = 614900000,
+	["4"] = Vector3.one,
+	["5"] = 3,
+}
+
+rem:Connect(function(Player: Player, ...: any?)
+	print("received from player ", Player)
+	print("deserialized data:", ...)
+
+	while task.wait(2) do
+		rem:SendUnsafeAll(dataToSend)
+	end
 end)
-
-Net.Connect("something", function(Player: Player, ...)
-	print(`received from player {Player.Name}.`)
-	print("params: ", ...)
-end)
-
-Net.HandleRequest("some port", function(...: any?): ...any?
-	return "random stuff"
-end)
-
-local a = Net.Request("player")
-print("got info from client", a)

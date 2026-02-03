@@ -458,7 +458,6 @@ function Sera.Deserialize(schema: Schema, b: buffer, offset: number?): ({ [strin
 	for _, field in schema.Numeric do
 		result[field.Key], offset = field.Des(b, offset :: number)
 	end
-
 	return result, offset :: number
 end
 
