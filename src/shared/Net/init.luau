@@ -116,7 +116,7 @@ function _sendUnsafeAsync(portId: string, player: Player?, ...: any?): ()
 end
 
 -- player, portid, args
-local function _request(portId: string, timeout: number?, player: Player?, ...: any?): any
+local function _request(player: Player?, portId: string, timeout: number?, ...: any?): any
 	local args = nil
 	timeout = timeout or 10
 	task.spawn(function(...)
@@ -159,9 +159,9 @@ if isClient then
 	remoteFunc.Parent = nil
 else
 	Net.Request = function(portId: string, timeout: number?, player: Player, ...: any?): typeof(_request)
-		return _request(portId)
+		return _request(player, portId, timeout, ...)
 	end
-
+	print("test stuff ")
 	remoteFunc.OnServerInvoke = HandleInvocation
 	remoteEvent.OnServerEvent:Connect(HandleRemoteFired)
 	unreliableRemoteEvent.OnServerEvent:Connect(HandleRemoteFired)
