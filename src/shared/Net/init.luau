@@ -1,7 +1,6 @@
 --!strict
 --By: @rancidmilk1.5
 --Minor changes by: @_ayoon
-local ExperienceStateRecordingService = game:GetService("ExperienceStateRecordingService")
 local RunService = game:GetService("RunService")
 
 type RunContext = "Client" | "Server"
