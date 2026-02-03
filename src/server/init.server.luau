@@ -19,6 +19,11 @@ local dataToSend = {
 	["5"] = 3,
 }
 
+print("waiting data from client...")
+local data = { rem:Wait() }
+print("GOT dATA: ", data)
+
+--[[
 rem:Connect(function(Player: Player, ...: any?)
 	print("received from player ", Player)
 	print("deserialized data:", ...)
@@ -27,3 +32,4 @@ rem:Connect(function(Player: Player, ...: any?)
 		rem:SendUnsafeAll(dataToSend)
 	end
 end)
+]]

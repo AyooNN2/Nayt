@@ -46,9 +46,14 @@ local function HandleInvocation(...: any)
 	return warn(`[{script.Name}]: No callback subscribed to port [{portId}]`)
 end
 
-function _wait(portId: string): ...any
+local function _wait(portId: string): ...any
 	Ports[portId] = Ports[portId] or Signal.new()
 	return Ports[portId]:Wait()
+end
+
+local function _once(portId: string, callback: (...any) -> ()): Signal.Receiver
+	Ports[portId] = Ports[portId] or Signal.new()
+	return Ports[portId]:Once(callback)
 end
 
 local function _connect(portId: string, callback: (...any) -> ()): Signal.Receiver
@@ -127,6 +132,7 @@ if isClient then
 	Net.Client.HandleRequest = _handleRequest
 	Net.Client.Connect = _connect
 	Net.Client.Wait = _wait
+	Net.Client.Once = _once
 
 	remoteFunc.OnClientInvoke = HandleInvocation
 	remoteEvent.OnClientEvent:Connect(HandleRemoteFired)
@@ -151,6 +157,7 @@ else
 	Net.Server.HandleRequest = _handleRequest
 	Net.Server.Connect = _connect
 	Net.Server.Wait = _wait
+	Net.Server.Once = _once
 
 	remoteFunc.OnServerInvoke = HandleInvocation
 	remoteEvent.OnServerEvent:Connect(HandleRemoteFired)

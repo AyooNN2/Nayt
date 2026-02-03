@@ -27,13 +27,16 @@ function Nayt:_serialize(...): buffer | any?
 		return ...
 	else
 		---... is expected to be a valid table respecting the schema
-		print(...)
 		return Sera.Serialize(self.schema, ...)
 	end
 end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
-	return nil
+	if self.isDynamic then
+		return ...
+	else
+		return Sera.Deserialize(self.schema, ...)
+	end
 end
 
 function Nayt:_send(player: Player?, safe: boolean, ...: any?): ()
@@ -90,29 +93,33 @@ function Nayt:SendUnsafeAll(...): ()
 	end
 end
 
-function Nayt:Connect(callback: (...any?) -> ())
+function Nayt:_wrapCallback(callback: (...any?) -> (), method: string)
 	if RunContext == "Server" then
-		return Net.Server.Connect(self.portId, function(...)
-			if self.isDynamic then
-				callback(...)
-			else
-				local args = { ... }
-				--You don't wanna deserialize Player instance
-				local Player: Player = RunContext == "Server" and table.remove(args, 1)
-				local DeserializedData = Sera.Deserialize(self.schema, args[1] :: buffer)
-				callback(Player, DeserializedData)
-			end
-		end)
+		return function(...)
+			local args = { ... }
+			--You don't wanna deserialize player instance
+			local player = table.remove(args, 1)
+			local deserializedData = self:_deserialize(unpack(args))
+			callback(player, deserializedData)
+		end
 	else
-		return Net.Client.Connect(self.portId, function(...)
-			if self.isDynamic then
-				callback(...)
-			else
-				local DeserializedData = Sera.Deserialize(self.schema, ... :: buffer)
-				callback(DeserializedData)
-			end
-		end)
+		return function(...)
+			local deserializedData = self:_deserialize(...)
+			callback(deserializedData)
+		end
 	end
+end
+
+function Nayt:Connect(callback: (...any?) -> ())
+	return Net[RunContext].Connect(self.portId, self:_wrapCallback(callback))
+end
+
+function Nayt:Once(callback: (...any?) -> ())
+	return Net[RunContext].Once(self.portId, self:_wrapCallback(callback))
+end
+
+function Nayt:Wait(): ...any?
+	return Net[RunContext].Wait(self.portId)
 end
 
 return Nayt
