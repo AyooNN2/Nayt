@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Nayt = require(ReplicatedStorage.Shared.Nayt)
 local Sera = require(ReplicatedStorage.Shared.Nayt.Sera)
@@ -9,19 +10,20 @@ local schema = Sera.Schema({
 	["4"] = Sera.Vector3,
 })
 
-local rem = Nayt.new("NaytPort", "Event", false, schema)
+local test = Nayt.new("testPort", schema)
 
 local dataToSend = {
 	["1"] = "HELLO",
 	["2"] = -541,
 	["3"] = 614900000,
 	["4"] = Vector3.one,
-	["5"] = 3,
 }
 
-print("waiting data from client...")
-local data = { rem:Wait() }
-print("GOT dATA: ", data)
+Players.PlayerAdded:Connect(function(a0: Player)
+	task.wait(7)
+	local data = { test:Request(a0, dataToSend) }
+	print("GOT dATA: ", data)
+end)
 
 --[[
 rem:Connect(function(Player: Player, ...: any?)

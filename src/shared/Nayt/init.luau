@@ -1,4 +1,4 @@
---!strict
+--By: @_ayoon (@AyooN2)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -7,23 +7,18 @@ local Sera = require(script.Sera)
 
 local RunContext: "Server" | "Client" = if RunService:IsServer() then "Server" else "Client"
 
---TODO: "Event"|"Function" and then type cast what .new() returns
-export type RemoteType = "Event" | "Function"
-
 local Nayt = {}
 Nayt.__index = Nayt
 
-function Nayt.new(portId: string, Type: RemoteType, isDataDynamic: boolean?, Schema: Sera.Schema?)
+function Nayt.new(portId: string, Schema: Sera.Schema?)
 	return setmetatable({
 		portId = portId,
-		type = Type,
-		isDynamic = isDataDynamic == nil and true,
 		schema = Schema,
 	}, Nayt)
 end
 
 function Nayt:_serialize(...): buffer | any?
-	if self.isDynamic then
+	if self.schema then
 		return ...
 	else
 		---... is expected to be a valid table respecting the schema
@@ -32,7 +27,7 @@ function Nayt:_serialize(...): buffer | any?
 end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
-	if self.isDynamic then
+	if self.schema then
 		return ...
 	else
 		return Sera.Deserialize(self.schema, ...)
@@ -60,7 +55,6 @@ function Nayt:Send(...): ()
 	if RunContext == "Server" then
 		local args = { ... }
 		local player = table.remove(args, 1)
-		print(typeof(player) == "Instance" and player:IsA("Player"))
 		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
 		self:_send(player, true, unpack(args))
 	else
@@ -93,7 +87,7 @@ function Nayt:SendUnsafeAll(...): ()
 	end
 end
 
-function Nayt:_wrapCallback(callback: (...any?) -> (), method: string)
+function Nayt:_wrapCallback(callback: (...any?) -> ())
 	if RunContext == "Server" then
 		return function(...)
 			local args = { ... }
@@ -120,6 +114,24 @@ end
 
 function Nayt:Wait(): ...any?
 	return Net[RunContext].Wait(self.portId)
+end
+
+function Nayt:HandleRequest(callback: (...any?) -> ...any?)
+	Net[RunContext].HandleRequest(self.portId, callback)
+end
+
+function Nayt:Request(...): ...any?
+	if RunContext == "Server" then
+		local args = { ... }
+
+		local player = table.remove(args, 1)
+		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
+		local serializedData = self:_serialize(unpack(args))
+
+		return Net.Server.Request(player :: Player, self.portId, nil, serializedData)
+	else
+		return Net.Client.Request(self.portId, nil, self:_serialize(...))
+	end
 end
 
 return Nayt
