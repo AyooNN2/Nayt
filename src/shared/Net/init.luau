@@ -24,11 +24,13 @@ local function HandleRemoteFired(...: any)
 	local args = { ... }
 	local argStart = if RunContext == "Client" then 1 else 2
 	local portId = table.remove(args, argStart)
-
+	warn(args)
 	assert(typeof(portId) == "string", "Invalid port id")
 	local port = Ports[portId]
 	if port then
+		print("found port", portId)
 		port:Fire(unpack(args))
+		print("port:", port)
 	else
 		warn(`[{script.Name}]: No receiver subscribed to port [{portId}]`)
 	end

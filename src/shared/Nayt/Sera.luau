@@ -140,10 +140,12 @@ Sera.Uint16 = table.freeze({
 Sera.Uint32 = table.freeze({
 	Name = "Uint32",
 	Ser = function(b: buffer, offset: number, value: number): number
+		warn("UINT 32 SERIALIZING")
 		buffer.writeu32(b, offset, value)
 		return offset + 4
 	end,
 	Des = function(b: buffer, offset: number): (number, number)
+		warn("UINT 32 DESERIALIZING")
 		return buffer.readu32(b, offset), offset + 4
 	end,
 })
@@ -265,12 +267,14 @@ Sera.LossyCFrame = table.freeze({
 Sera.Vector3 = table.freeze({
 	Name = "Vector3",
 	Ser = function(b: buffer, offset: number, value: Vector3): number
+		warn("SERILAZING VECTOR3")
 		buffer.writef32(b, offset, value.X)
 		buffer.writef32(b, offset + 4, value.Y)
 		buffer.writef32(b, offset + 8, value.Z)
 		return offset + 12
 	end,
 	Des = function(b: buffer, offset: number): (Vector3, number)
+		warn("DESERIALIZN VCET3")
 		return Vector3.new(buffer.readf32(b, offset), buffer.readf32(b, offset + 4), buffer.readf32(b, offset + 8)),
 			offset + 12
 	end,
@@ -455,9 +459,11 @@ function Sera.Deserialize(schema: Schema, b: buffer, offset: number?): ({ [strin
 	offset = offset or 0
 	local result = {}
 
+	print("[SERA]: DESER HAS BEEN CALLED", schema)
 	for _, field in schema.Numeric do
 		result[field.Key], offset = field.Des(b, offset :: number)
 	end
+	print("[SERA]: DONE SERIALIZING, RETURNINGS")
 	return result, offset :: number
 end
 

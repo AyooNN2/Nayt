@@ -19,21 +19,23 @@ end
 
 function Nayt:_serialize(...): buffer | any?
 	if self.schema then
-		return ...
-	else
 		---... is expected to be a valid table respecting the schema
 		return Sera.Serialize(self.schema, ...)
+	else
+		return ...
 	end
 end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
 	if self.schema then
-		return ...
+		local des, a = Sera.Deserialize(self.schema, ...)
+		print(des, a)
+		return des
 	else
-		return Sera.Deserialize(self.schema, ...)
+		return ...
 	end
 end
-
+--TODO: check for schema validity
 function Nayt:_send(player: Player?, safe: boolean, ...: any?): ()
 	if RunContext == "Server" then
 		assert(player ~= nil, `[{self.portId}]: Player was not specified`)
@@ -53,10 +55,9 @@ end
 
 function Nayt:Send(...): ()
 	if RunContext == "Server" then
-		local args = { ... }
-		local player = table.remove(args, 1)
+		local player = ...
 		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
-		self:_send(player, true, unpack(args))
+		self:_send(player, true, select(2, ...))
 	else
 		self:_send(nil, true, ...)
 	end
@@ -64,10 +65,9 @@ end
 
 function Nayt:SendUnsafe(...): ()
 	if RunContext == "Server" then
-		local args = { ... }
-		local player = table.remove(args, 1)
+		local player = ...
 		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
-		self:_send(player, false, unpack(args))
+		self:_send(player, false, select(2, ...))
 	else
 		self:_send(nil, false, ...)
 	end
@@ -89,11 +89,14 @@ end
 
 function Nayt:_wrapCallback(callback: (...any?) -> ())
 	if RunContext == "Server" then
+		print("we are here")
 		return function(...)
-			local args = { ... }
 			--You don't wanna deserialize player instance
-			local player = table.remove(args, 1)
-			local deserializedData = self:_deserialize(unpack(args))
+			print("HEYYY")
+			local player = ...
+			local deserializedData = self:_deserialize(select(2, ...))
+
+			print(debug.traceback())
 			callback(player, deserializedData)
 		end
 	else
@@ -117,16 +120,25 @@ function Nayt:Wait(): ...any?
 end
 
 function Nayt:HandleRequest(callback: (...any?) -> ...any?)
-	Net[RunContext].HandleRequest(self.portId, callback)
+	if RunContext == "Server" then
+		return Net.Server.HandleRequest(self.portId, function(...: any?): ...any?
+			local player = ...
+			local deserializedData = self:_deserialize(select(2, ...))
+			return callback(player, deserializedData)
+		end)
+	else
+		return Net.Client.HandleRequest(self.portId, function(...: any?): ...any?
+			local deserializedData = self:_deserialize(...)
+			return callback(deserializedData)
+		end)
+	end
 end
 
 function Nayt:Request(...): ...any?
 	if RunContext == "Server" then
-		local args = { ... }
-
-		local player = table.remove(args, 1)
+		local player = ...
 		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
-		local serializedData = self:_serialize(unpack(args))
+		local serializedData = self:_serialize(select(2, ...))
 
 		return Net.Server.Request(player :: Player, self.portId, nil, serializedData)
 	else

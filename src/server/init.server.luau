@@ -11,27 +11,19 @@ local schema = Sera.Schema({
 })
 
 local test = Nayt.new("testPort", schema)
+local rem = Nayt.new("rem", schema)
 
 local dataToSend = {
 	["1"] = "HELLO",
 	["2"] = -541,
-	["3"] = 614900000,
+	["3"] = os.time(),
 	["4"] = Vector3.one,
 }
 
-Players.PlayerAdded:Connect(function(a0: Player)
-	task.wait(7)
-	local data = { test:Request(a0, dataToSend) }
-	print("GOT dATA: ", data)
+test:Connect(function(Player: Player, ...: any?)
+	print("data received from", Player)
+	print("data:", ...)
 end)
 
---[[
-rem:Connect(function(Player: Player, ...: any?)
-	print("received from player ", Player)
-	print("deserialized data:", ...)
-
-	while task.wait(2) do
-		rem:SendUnsafeAll(dataToSend)
-	end
-end)
-]]
+task.wait(2)
+rem:SendUnsafeAll(dataToSend)
