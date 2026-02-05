@@ -28,8 +28,7 @@ end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
 	if self.schema then
-		local des, a = Sera.Deserialize(self.schema, ...)
-		print(des, a)
+		local des = Sera.Deserialize(self.schema, ...)
 		return des
 	else
 		return ...
@@ -89,14 +88,10 @@ end
 
 function Nayt:_wrapCallback(callback: (...any?) -> ())
 	if RunContext == "Server" then
-		print("we are here")
 		return function(...)
 			--You don't wanna deserialize player instance
-			print("HEYYY")
 			local player = ...
 			local deserializedData = self:_deserialize(select(2, ...))
-
-			print(debug.traceback())
 			callback(player, deserializedData)
 		end
 	else

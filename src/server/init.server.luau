@@ -1,4 +1,3 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Nayt = require(ReplicatedStorage.Shared.Nayt)
 local Sera = require(ReplicatedStorage.Shared.Nayt.Sera)
