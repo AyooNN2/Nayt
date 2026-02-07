@@ -1,7 +1,11 @@
+--!optimize 2
+
 --By: @_ayoon (@AyooN2)
+local EncodingService = game:GetService("EncodingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
+--TODO: use encoding service
 local Net = require(script.Parent.Net)
 local Sera = require(script.Sera)
 
@@ -17,10 +21,16 @@ function Nayt.new(portId: string, Schema: Sera.Schema?)
 	}, Nayt)
 end
 
-function Nayt:_serialize(...): buffer | any?
+function Nayt:_serialize(...): (buffer?, boolean?)
 	if self.schema then
 		---... is expected to be a valid table respecting the schema
-		return Sera.Serialize(self.schema, ...)
+		local buff = Sera.Serialize(self.schema, ...)
+		local encoded = EncodingService:CompressBuffer(buff, Enum.CompressionAlgorithm.Zstd, 9)
+		if buffer.len(encoded) < buffer.len(buff) then
+			return encoded, true
+		else
+			return buff, false
+		end
 	else
 		return ...
 	end
@@ -28,7 +38,13 @@ end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
 	if self.schema then
-		local des = Sera.Deserialize(self.schema, ...)
+		--if schema exists, then '...' is a buffer
+		local buff: buffer, isEncoded: boolean = ...
+		if isEncoded then
+			buff = EncodingService:DecompressBuffer(buff, Enum.CompressionAlgorithm.Zstd)
+		end
+
+		local des = Sera.Deserialize(self.schema, buff)
 		return des
 	else
 		return ...
@@ -89,15 +105,12 @@ end
 function Nayt:_wrapCallback(callback: (...any?) -> ())
 	if RunContext == "Server" then
 		return function(...)
-			--You don't wanna deserialize player instance
 			local player = ...
-			local deserializedData = self:_deserialize(select(2, ...))
-			callback(player, deserializedData)
+			callback(player, self:_deserialize(select(2, ...)))
 		end
 	else
 		return function(...)
-			local deserializedData = self:_deserialize(...)
-			callback(deserializedData)
+			callback(self:_deserialize(...))
 		end
 	end
 end
@@ -118,13 +131,11 @@ function Nayt:HandleRequest(callback: (...any?) -> ...any?)
 	if RunContext == "Server" then
 		return Net.Server.HandleRequest(self.portId, function(...: any?): ...any?
 			local player = ...
-			local deserializedData = self:_deserialize(select(2, ...))
-			return callback(player, deserializedData)
+			return callback(player, self:_deserialize(select(2, ...)))
 		end)
 	else
 		return Net.Client.HandleRequest(self.portId, function(...: any?): ...any?
-			local deserializedData = self:_deserialize(...)
-			return callback(deserializedData)
+			return callback(self:_deserialize(...))
 		end)
 	end
 end

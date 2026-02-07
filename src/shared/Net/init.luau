@@ -17,7 +17,7 @@ local remoteFunc = script:FindFirstChildOfClass("RemoteFunction") or Instance.ne
 
 local Net = { Client = {}, Server = {} }
 
-local Ports = {} :: { [string]: Signal.Signal }
+local Ports = {} :: { [string]: Signal.Signal<...any> }
 local Callbacks = {} :: { [string]: (...any) -> ...any }
 
 local function HandleRemoteFired(...: any)
@@ -26,6 +26,7 @@ local function HandleRemoteFired(...: any)
 	local portId = table.remove(args, argStart)
 	assert(typeof(portId) == "string", "Invalid port id")
 	local port = Ports[portId]
+
 	if port then
 		port:Fire(unpack(args))
 	else
@@ -50,12 +51,12 @@ local function _wait(portId: string): ...any
 	return Ports[portId]:Wait()
 end
 
-local function _once(portId: string, callback: (...any) -> ()): Signal.Receiver
+local function _once(portId: string, callback: (...any) -> ()): Signal.Connection
 	Ports[portId] = Ports[portId] or Signal.new()
 	return Ports[portId]:Once(callback)
 end
 
-local function _connect(portId: string, callback: (...any) -> ()): Signal.Receiver
+local function _connect(portId: string, callback: (...any) -> ()): Signal.Connection
 	Ports[portId] = Ports[portId] or Signal.new()
 	return Ports[portId]:Connect(callback)
 end
@@ -74,7 +75,7 @@ local function _sendAsync(player: Player?, portId: string, ...: any?): ()
 		remoteEvent:FireServer(portId, ...)
 		remoteEvent.Parent = nil
 	else
-		remoteEvent:FireClient(player, portId, ...)
+		remoteEvent:FireClient(player :: Player, portId, ...)
 	end
 end
 
@@ -84,7 +85,7 @@ local function _sendUnsafeAsync(player: Player?, portId: string, ...: any?): ()
 		unreliableRemoteEvent:FireServer(portId, ...)
 		unreliableRemoteEvent.Parent = nil
 	else
-		unreliableRemoteEvent:FireClient(player, portId, ...)
+		unreliableRemoteEvent:FireClient(player :: Player, portId, ...)
 	end
 end
 
@@ -98,7 +99,7 @@ local function _request(player: Player?, portId: string, timeout: number?, ...: 
 			remoteFunc.Parent = script
 			args = { remoteFunc:InvokeServer(portId, ...) }
 		else
-			args = { remoteFunc:InvokeClient(player, portId, ...) }
+			args = { remoteFunc:InvokeClient(player :: Player, portId, ...) }
 		end
 	end, ...)
 	local t0 = os.clock()
@@ -137,9 +138,9 @@ if isClient then
 	remoteEvent.OnClientEvent:Connect(HandleRemoteFired)
 	unreliableRemoteEvent.OnClientEvent:Connect(HandleRemoteFired)
 
-	unreliableRemoteEvent.Parent = nil
-	remoteEvent.Parent = nil
-	remoteFunc.Parent = nil
+	--unreliableRemoteEvent.Parent = nil
+	--remoteEvent.Parent = nil
+	--remoteFunc.Parent = nil
 else
 	Net.Server.Request = function(player: Player, portId: string, timeout: number?, ...: any?): ...any?
 		return _request(player, portId, timeout, ...)
