@@ -1,69 +1,161 @@
 --!optimize 2
 
 --By: @_ayoon (@AyooN2)
-local EncodingService = game:GetService("EncodingService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
---TODO: use encoding service
+local Bardo = require(script.Bardo)
 local Net = require(script.Parent.Net)
-local Sera = require(script.Sera)
 
 local RunContext: "Server" | "Client" = if RunService:IsServer() then "Server" else "Client"
 
-local Nayt = {}
+export type NaytPort<T...> = {
+	Send: (NaytPort<T...>, Player, T...) -> () & (NaytPort<T...>, T...) -> (),
+	SendUnsafe: (NaytPort<T...>, Player, T...) -> () & (NaytPort<T...>, T...) -> (),
+	SendAll: (NaytPort<T...>, T...) -> (),
+	SendAllUnsafe: (NaytPort<T...>, T...) -> (),
+
+	Connect: (NaytPort<T...>, (T...) -> ()) -> () & (NaytPort<T...>, (Player, T...) -> ()) -> (),
+	Once: (NaytPort<T...>, (T...) -> ()) -> () & (NaytPort<T...>, (Player, T...) -> ()) -> (),
+	Wait: ((NaytPort<T...>) -> T...) & (NaytPort<T...>) -> (Player, T...),
+	Request: (NaytPort<T...>, ...any?) -> T...,
+
+	HandleRequest: (NaytPort<T...>, (...any) -> T...) -> (),
+}
+
+type Nayt = {
+	new: (portId: string, Schema: { Bardo.BardoType }?, AutoUpdate: boolean?) -> NaytPort<...any?>,
+}
+
+local Nayt = {} :: Nayt
+local NaytPorts: { [string]: NaytPort<...any?> } = {}
+
 Nayt.__index = Nayt
 
-function Nayt.new(portId: string, Schema: Sera.Schema?)
-	return setmetatable({
+--WARNING: Not recommended to use AutoUpdate when sending strings with varying length
+function Nayt.new(portId: string, Schema: { Bardo.BardoType }?, AutoUpdate: boolean?)
+	local self = setmetatable({
 		portId = portId,
+		autoUpdate = AutoUpdate or true,
 		schema = Schema,
+		updatedPlayers = {},
 	}, Nayt)
+
+	NaytPorts[portId] = self
+
+	return self
 end
 
-function Nayt:_serialize(...): (buffer?, boolean?)
-	if self.schema then
-		---... is expected to be a valid table respecting the schema
-		local buff = Sera.Serialize(self.schema, ...)
-		local encoded = EncodingService:CompressBuffer(buff, Enum.CompressionAlgorithm.Zstd, 9)
-		if buffer.len(encoded) < buffer.len(buff) then
-			return encoded, true
-		else
-			return buff, false
+local function getn(t: { [any?]: any? }): number
+	local n = 0
+	for _ in t do
+		n += 1
+	end
+	return n
+end
+
+local function equal(t1: { [any]: any }, t2: { [any]: any }): boolean
+	if t1 == t2 then
+		return true
+	end
+	for k, v in t1 do
+		if t2[k] == nil then
+			return false
 		end
-	else
+		if t2[k] ~= v then
+			return false
+		end
+	end
+
+	return getn(t1) == getn(t2)
+end
+
+function Nayt:_serialize(player: Player?, ...): (buffer?, { any? }?)
+	if not self.schema then
 		return ...
 	end
+
+	local newSchema = Bardo.AutoSchema(...)
+	local schemaChanged: boolean = not equal(newSchema, self.schema)
+
+	if schemaChanged then
+		if RunContext == "Server" then
+			if self.autoUpdate then
+				self.schema = newSchema
+				self.updatedPlayers = {}
+				self.updatedPlayers[player] = true
+			end
+		else
+			error(`Incorrect schema for port '{self.portId}', will not send to server.`)
+		end
+	end
+
+	local result = { Bardo.sanctify(self.schema, ...) }
+
+	--Possible if none of the passed args are serializable
+	if typeof(result[1]) ~= "buffer" then
+		if schemaChanged or not self.updatedPlayers[player] and RunContext == "Server" then
+			table.insert(result, Bardo.sanctifySchema(self.schema))
+			self.updatedPlayers[player] = true
+		end
+
+		return unpack(result)
+	end
+
+	local unserializedValues = table.remove(result, 2) :: { any }
+
+	if unserializedValues then --table of unserializable values,
+		for _, v in ipairs(unserializedValues) do
+			table.insert(result, v)
+		end
+	end
+
+	if schemaChanged or not self.updatedPlayers[player] and RunContext == "Server" then
+		table.insert(result, Bardo.sanctifySchema(self.schema))
+		self.updatedPlayers[player] = true
+	end
+
+	return unpack(result)
 end
 
 function Nayt:_deserialize(...): { [string]: any } | any?
-	if self.schema then
-		--if schema exists, then '...' is a buffer
-		local buff: buffer, isEncoded: boolean = ...
-		if isEncoded then
-			buff = EncodingService:DecompressBuffer(buff, Enum.CompressionAlgorithm.Zstd)
-		end
-
-		local des = Sera.Deserialize(self.schema, buff)
-		return des
-	else
+	if not self.schema then
 		return ...
 	end
+
+	--if schema exists, then '...' is a buffer
+	local args = { ... }
+	local buff = table.remove(args, 1) :: buffer
+	local newSchema: buffer? = table.remove(args, #args)
+	local schema: Bardo.Schema = self.schema
+
+	print("possible buffer: ", newSchema)
+	if newSchema and typeof(newSchema) == "buffer" then
+		if RunContext == "Server" then
+			error(`Player tried to change server's schema.`)
+		else
+			schema = Bardo.rebornSchema(newSchema)
+			self.schema = schema
+			return Bardo.reborn(schema, buff, unpack(args))
+		end
+	end
+
+	return Bardo.reborn(schema, buff, select(2, ...))
 end
---TODO: check for schema validity
+
 function Nayt:_send(player: Player?, safe: boolean, ...: any?): ()
 	if RunContext == "Server" then
 		assert(player ~= nil, `[{self.portId}]: Player was not specified`)
 		if safe then
-			Net.Server.SendAsync(player :: Player, self.portId, self:_serialize(...))
+			Net.Server.SendAsync(player :: Player, self.portId, self:_serialize(player, ...))
 		else
-			Net.Server.SendUnsafeAsync(player :: Player, self.portId, self:_serialize(...))
+			Net.Server.SendUnsafeAsync(player :: Player, self.portId, self:_serialize(player, ...))
 		end
 	else
 		if safe then
-			Net.Client.SendAsync(self.portId, self:_serialize(...))
+			Net.Client.SendAsync(self.portId, self:_serialize(nil, ...))
 		else
-			Net.Client.SendUnsafeAsync(self.portId, self:_serialize(...))
+			Net.Client.SendUnsafeAsync(self.portId, self:_serialize(nil, ...))
 		end
 	end
 end
@@ -144,12 +236,19 @@ function Nayt:Request(...): ...any?
 	if RunContext == "Server" then
 		local player = ...
 		assert(typeof(player) == "Instance" and player:IsA("Player"), `[{self.portId}]: Player was not specified`)
-		local serializedData = self:_serialize(select(2, ...))
 
-		return Net.Server.Request(player :: Player, self.portId, nil, serializedData)
+		return Net.Server.Request(player :: Player, self.portId, nil, self:_serialize(player, ...))
 	else
-		return Net.Client.Request(self.portId, nil, self:_serialize(...))
+		return Net.Client.Request(self.portId, nil, self:_serialize(nil, ...))
 	end
 end
+
+Players.PlayerRemoving:Connect(function(player: Player)
+	for _, naytPort in NaytPorts do
+		if naytPort.updatedPlayers[player] then
+			naytPort.updatedPlayers[player] = nil
+		end
+	end
+end)
 
 return Nayt

@@ -26,7 +26,6 @@ local function HandleRemoteFired(...: any)
 	local portId = table.remove(args, argStart)
 	assert(typeof(portId) == "string", "Invalid port id")
 	local port = Ports[portId]
-
 	if port then
 		port:Fire(unpack(args))
 	else

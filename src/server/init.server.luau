@@ -1,42 +1,53 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Nayt = require(ReplicatedStorage.Shared.Nayt)
-local Sera = require(ReplicatedStorage.Shared.Nayt.Sera)
+local Bardo = require(ReplicatedStorage.Shared.Nayt.Bardo)
 
-local schema = Sera.Schema({
-	["1"] = Sera.LossyCFrame,
-	["2"] = Sera.LossyCFrame,
-	["3"] = Sera.LossyCFrame,
-	["4"] = Sera.LossyCFrame,
-	["5"] = Sera.LossyCFrame,
-})
-local testSchema = Sera.Schema({
-	["aaa"] = Sera.String8,
-})
-
-local test = Nayt.new("testPort", testSchema)
-local rem = Nayt.new("rem", schema)
-
-local dataToSend = {
-	["1"] = CFrame.new(math.random(1000), math.random(1000), math.random(1000))
-		* CFrame.Angles(math.random(1000), math.random(1000), math.random(1000)),
-	["2"] = CFrame.new(math.random(1000), math.random(1000), math.random(1000))
-		* CFrame.Angles(math.random(1000), math.random(1000), math.random(1000)),
-	["3"] = CFrame.new(math.random(1000), math.random(1000), math.random(1000))
-		* CFrame.Angles(math.random(1000), math.random(1000), math.random(1000)),
-	["4"] = CFrame.new(math.random(1000), math.random(1000), math.random(1000))
-		* CFrame.Angles(math.random(1000), math.random(1000), math.random(1000)),
-	["5"] = CFrame.new(math.random(1000), math.random(1000), math.random(1000))
-		* CFrame.Angles(math.random(1000), math.random(1000), math.random(1000)),
+local datarand = {
+	156,
+	-2,
+	64305,
+	-31097,
+	4_294_967_292,
+	1_147_483_643,
+	9121560.02589978,
+	CFrame.new(math.random(360), math.random(360), math.random(360))
+		* CFrame.Angles(math.random(360), math.random(360), math.random(360)),
+	Color3.new(math.random(), math.random(), math.random()),
+	"ouaiiisdfqsàdfuqsdfjoqsdfhojqsdfhjoqfsdhjhqsdfkqsdfqmsldfjh",
+	Vector3.new(math.random(1000), math.random(1000), math.random(1000)),
+	Vector2.new(math.random(1000), math.random(1000)),
+	true,
+	false,
+	workspace,
+	ReplicatedStorage,
 }
 
-test:Connect(function(Player: Player, ...: any?)
-	print("data received from", Player)
-	print("data:", ...)
+local port = Nayt.new("bardoPort", { Bardo.Unserializable }, true)
+local testport = Nayt.new("ClientPort", { Bardo.Unserializable }, true)
+
+testport:Connect(function(Player: Player, ...)
+	print("got data from: ", Player.Name)
+	print("data: ", ...)
 end)
 
-task.wait(2)
-print("will send data")
-
-while task.wait(0.5) do
-	rem:SendUnsafeAll(dataToSend)
+while task.wait(10) do
+	port:SendAll(
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)],
+		datarand[math.random(#datarand)]
+	)
 end
