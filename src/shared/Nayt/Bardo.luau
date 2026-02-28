@@ -686,7 +686,6 @@ Bardo.getTypeInfo = function(bardoType: BardoType): (string?, number?)
 	return nil, nil
 end
 
--- Vérifie si containerType peut contenir valueType
 Bardo.tryConvertType = function(targetType: BardoType, valueType: BardoType, value: any): BardoType?
 	if targetType == valueType then
 		return targetType
@@ -708,7 +707,6 @@ Bardo.tryConvertType = function(targetType: BardoType, valueType: BardoType, val
 		return -math.huge, math.huge
 	end
 
-	-- Helper : obtenir max d'un type uint
 	local function getUintMax(uintType: BardoType): number
 		if uintType == Bardo.uint8 then
 			return U8_MAX
@@ -727,31 +725,27 @@ Bardo.tryConvertType = function(targetType: BardoType, valueType: BardoType, val
 	local targetFamily, targetIndex = Bardo.getTypeInfo(targetType)
 	local valueFamily, valueIndex = Bardo.getTypeInfo(valueType)
 
-	-- Même famille : OK si target plus grand
 	if targetFamily and targetFamily == valueFamily then
 		if targetIndex >= valueIndex then
 			return targetType
 		end
 	end
 
-	-- ✅ Conversion uint ↔ int : vérifier si la valeur rentre
 	if targetFamily == "int" and valueFamily == "uint" and typeof(value) == "number" then
-		-- uint détecté, int demandé : vérifier range
 		local intMin, intMax = getIntRange(targetType)
 		if value >= intMin and value <= intMax then
-			return targetType -- ✅ La valeur rentre dans l'int !
+			return targetType
 		end
 	end
 
 	if targetFamily == "uint" and valueFamily == "int" and typeof(value) == "number" then
-		-- int détecté, uint demandé : vérifier que positif et dans range
 		local uintMax = getUintMax(targetType)
 		if value >= 0 and value <= uintMax then
-			return targetType -- ✅ La valeur rentre dans l'uint !
+			return targetType
 		end
 	end
 
-	return nil -- Pas de conversion possible
+	return nil
 end
 
 Bardo.getSize = function(value: any, bardoType: BardoType): number

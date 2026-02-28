@@ -24,7 +24,7 @@ export type NaytPort<T...> = {
 }
 
 type Nayt = {
-	new: (portId: string, AutoUpdate: boolean?, schema: { Bardo.BardoType }?) -> NaytPort<...any?>,
+	new: (portId: string, Secure: boolean?, AutoUpdate: boolean?, schema: { Bardo.BardoType }?) -> NaytPort<...any?>,
 }
 
 local Nayt = {} :: Nayt
@@ -314,7 +314,7 @@ function Nayt.new(portId: string, Secure: boolean?, AutoUpdate: boolean?, schema
 	local self = setmetatable({
 		portId = portId,
 		autoUpdate = AutoUpdate ~= false,
-		secure = AutoUpdate ~= false,
+		secure = Secure ~= false,
 		schema = schema or {},
 		argsType = argsType,
 		updatedPlayers = RunContext == "Server" and {} or nil,
