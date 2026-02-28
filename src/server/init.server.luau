@@ -1,3 +1,4 @@
+local CreatorStoreService = game:GetService("CreatorStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Nayt = require(ReplicatedStorage.Shared.Nayt)
 local Bardo = require(ReplicatedStorage.Shared.Nayt.Bardo)
@@ -20,34 +21,18 @@ local datarand = {
 	false,
 	workspace,
 	ReplicatedStorage,
+	Enum.AssetType.Decal,
+	CFrame.identity,
+	Vector3.one,
+	buffer.create(32),
 }
 
-local port = Nayt.new("bardoPort", { Bardo.Unserializable }, true)
-local testport = Nayt.new("ClientPort", { Bardo.Unserializable }, true)
+local port = Nayt.new("port", true, false, { Bardo.CFrame })
 
-testport:Connect(function(Player: Player, ...)
-	print("got data from: ", Player.Name)
-	print("data: ", ...)
+port:Connect(function(player: Player, ...)
+	print("client, ", player.Name, "sent: ", ...)
 end)
 
-while task.wait(10) do
-	port:SendAll(
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)],
-		datarand[math.random(#datarand)]
-	)
+while task.wait(1) do
+	port:SendAll(CFrame.Angles(6, 84, 65))
 end

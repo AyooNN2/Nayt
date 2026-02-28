@@ -12,7 +12,7 @@ local data = {
 	Color3.new(0.733333, 0.313725, 0.313725),
 }
 
-local port = Nayt.new("bardoPort", Bardo.AutoSchema(unpack(data)), true)
+local port = Nayt.new("port", true, false, { Bardo.uint16 })
 
 local datarand = {
 	"aaaaaaa",
@@ -25,14 +25,9 @@ local datarand = {
 	42949672951,
 }
 
-local testport = Nayt.new("ClientPort", { Bardo.Unserializable }, true)
 UserInputService.InputBegan:Connect(function(a0: InputObject, a1: boolean)
-	if a1 then
-		return
-	end
-
 	if a0.KeyCode == Enum.KeyCode.E then
-		testport:Send(true, false, 48949)
+		port:Send(CFrame.new() * CFrame.Angles(12, 5, 9))
 	end
 end)
 
