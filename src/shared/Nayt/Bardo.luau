@@ -1,6 +1,7 @@
 --!optimize 2
 
 --By: @_ayoon (@AyooN2)
+
 local EncodingService = game:GetService("EncodingService")
 local Bardo = {}
 
@@ -45,13 +46,16 @@ local ru32 = buffer.readu32
 local rf32 = buffer.readf32
 local rf64 = buffer.readf64
 
+local round = math.round
+local PI = math.pi
+
 local function inRange(n: number, min: number, max: number): boolean
 	return min <= n and n <= max
 end
 
 local function floatToI16(v: number): number
 	v = math.clamp(v, -1, 1)
-	return math.clamp(math.round(v * I16_MAX), I16_MIN, I16_MAX)
+	return math.clamp(round(v * I16_MAX), I16_MIN, I16_MAX)
 end
 
 local function i16ToFloat(i: number): number
@@ -116,48 +120,86 @@ local function CompressQuaternion(cf: CFrame): (number, number, number, number)
 	return minIdx - 1, result[1], result[2], result[3]
 end
 
-local function DecompressQuaternion(idx: number, a: number, b: number, c: number): CFrame
-	local components = {}
-	local values = { a, b, c }
-	local valueIdx = 1
+local AXIS_ALIGNED_ROTATIONS = {
+	CFrame.new(),
+	CFrame.Angles(0, PI / 2, 0),
+	CFrame.Angles(0, PI, 0),
+	CFrame.Angles(0, -PI / 2, 0),
+	CFrame.Angles(PI / 2, 0, 0),
+	CFrame.Angles(PI / 2, PI / 2, 0),
+	CFrame.Angles(PI / 2, PI, 0),
+	CFrame.Angles(PI / 2, -PI / 2, 0),
+	CFrame.Angles(-PI / 2, 0, 0),
+	CFrame.Angles(-PI / 2, PI / 2, 0),
+	CFrame.Angles(-PI / 2, PI, 0),
+	CFrame.Angles(-PI / 2, -PI / 2, 0),
+	CFrame.Angles(0, 0, PI / 2),
+	CFrame.Angles(0, PI / 2, PI / 2),
+	CFrame.Angles(0, PI, PI / 2),
+	CFrame.Angles(0, -PI / 2, PI / 2),
+	CFrame.Angles(0, 0, -PI / 2),
+	CFrame.Angles(0, PI / 2, -PI / 2),
+	CFrame.Angles(0, PI, -PI / 2),
+	CFrame.Angles(0, -PI / 2, -PI / 2),
+	CFrame.Angles(PI, 0, 0),
+	CFrame.Angles(PI, PI / 2, 0),
+	CFrame.Angles(PI, PI, 0),
+	CFrame.Angles(PI, -PI / 2, 0),
+}
 
-	for i = 1, 4 do
-		if i - 1 == idx then
-			components[i] = 0
-		else
-			components[i] = values[valueIdx]
-			valueIdx += 1
-		end
+local ROTATION_TO_INDEX = {}
+for i, rot in ipairs(AXIS_ALIGNED_ROTATIONS) do
+	local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = rot:GetComponents()
+	local key = string.format(
+		"%d,%d,%d,%d,%d,%d,%d,%d,%d",
+		round(r00),
+		round(r01),
+		round(r02),
+		round(r10),
+		round(r11),
+		round(r12),
+		round(r20),
+		round(r21),
+		round(r22)
+	)
+	ROTATION_TO_INDEX[key] = i
+end
+
+local function encodeAxisAlignedRotation(cf: CFrame): number?
+	local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+
+	local key = string.format(
+		"%d,%d,%d,%d,%d,%d,%d,%d,%d",
+		round(r00),
+		round(r01),
+		round(r02),
+		round(r10),
+		round(r11),
+		round(r12),
+		round(r20),
+		round(r21),
+		round(r22)
+	)
+
+	return ROTATION_TO_INDEX[key]
+end
+
+local function isAxisAligned(cf: CFrame): boolean
+	local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
+
+	local function nearInt(val: number): boolean
+		return math.abs(val - round(val)) < 1e-5
 	end
 
-	local sumSquares = 0
-	for i = 1, 4 do
-		if i - 1 ~= idx then
-			sumSquares += components[i] * components[i]
-		end
-	end
-
-	components[idx + 1] = math.sqrt(math.clamp(1 - sumSquares, 0, 1))
-
-	local qx, qy, qz, qw = components[1], components[2], components[3], components[4]
-
-	local xx, yy, zz = qx * qx, qy * qy, qz * qz
-	local xy, xz, yz = qx * qy, qx * qz, qy * qz
-	local wx, wy, wz = qw * qx, qw * qy, qw * qz
-
-	local r00 = 1 - 2 * (yy + zz)
-	local r01 = 2 * (xy - wz)
-	local r02 = 2 * (xz + wy)
-
-	local r10 = 2 * (xy + wz)
-	local r11 = 1 - 2 * (xx + zz)
-	local r12 = 2 * (yz - wx)
-
-	local r20 = 2 * (xz - wy)
-	local r21 = 2 * (yz + wx)
-	local r22 = 1 - 2 * (xx + yy)
-
-	return CFrame.new(0, 0, 0, r00, r01, r02, r10, r11, r12, r20, r21, r22)
+	return nearInt(r00)
+		and nearInt(r01)
+		and nearInt(r02)
+		and nearInt(r10)
+		and nearInt(r11)
+		and nearInt(r12)
+		and nearInt(r20)
+		and nearInt(r21)
+		and nearInt(r22)
 end
 
 Bardo.uint8 = {
@@ -291,8 +333,15 @@ Bardo.LosslessCFrame = {
 		local a = rf32(b, offset + 13)
 		local qb = rf32(b, offset + 17)
 		local c = rf32(b, offset + 21)
-		local rotCF = DecompressQuaternion(idx, a, qb, c)
-		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8)) * rotCF, offset + 25
+
+		local missing = math.sqrt(math.clamp(1 - (a * a + qb * qb + c * c), 0, 1))
+
+		local qx = idx == 0 and missing or a
+		local qy = idx == 1 and missing or (idx == 0 and a or qb)
+		local qz = idx == 2 and missing or (idx <= 1 and qb or c)
+		local qw = idx == 3 and missing or c
+
+		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8), qx, qy, qz, qw), offset + 25
 	end,
 }
 
@@ -315,26 +364,42 @@ Bardo.CFrame = {
 
 	reborn = function(b: buffer, offset: number): (CFrame, number)
 		local idx = ru8(b, offset + 12)
+
 		local a, qb, c =
 			i16ToFloat(ri16(b, offset + 13)), i16ToFloat(ri16(b, offset + 15)), i16ToFloat(ri16(b, offset + 17))
-		local rotCF = DecompressQuaternion(idx, a, qb, c)
 
-		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8)) * rotCF, offset + 19
+		local missing = math.sqrt(math.clamp(1 - (a * a + qb * qb + c * c), 0, 1))
+
+		local qx = idx == 0 and missing or a
+		local qy = idx == 1 and missing or (idx == 0 and a or qb)
+		local qz = idx == 2 and missing or (idx <= 1 and qb or c)
+		local qw = idx == 3 and missing or c
+
+		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8), qx, qy, qz, qw), offset + 19
 	end,
 }
 
 Bardo.AxisAlignedCFrame = {
-	size = 12,
+	size = 13,
 
 	sanctify = function(b: buffer, offset: number, value: CFrame): number
+		assert(
+			isAxisAligned(value),
+			`Expected CFrame to be axis aligned (max epsilon is {1e-5}), please use Bardo.LosslessCFrame or Bardo.CFrame instead`
+		)
+
 		wf32(b, offset, value.X)
 		wf32(b, offset + 4, value.Y)
 		wf32(b, offset + 8, value.Z)
-		return offset + 12
+		wu8(b, offset + 12, encodeAxisAlignedRotation(value) or 1)
+
+		return offset + 13
 	end,
 
 	reborn = function(b: buffer, offset: number): (CFrame, number)
-		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8)), offset + 12
+		local rotIdx = ru8(b, offset + 12)
+		return CFrame.new(rf32(b, offset), rf32(b, offset + 4), rf32(b, offset + 8)) * AXIS_ALIGNED_ROTATIONS[rotIdx],
+			offset + 13
 	end,
 }
 
@@ -612,8 +677,7 @@ Bardo.auto = function(value: any): BardoType
 			return Bardo.string16
 		end
 	elseif t == "CFrame" then
-		local x, y, z = value:ToOrientation()
-		if x == 0 and y == 0 and z == 0 then
+		if isAxisAligned(value) then
 			return Bardo.AxisAlignedCFrame
 		else
 			return Bardo.CFrame
@@ -809,11 +873,29 @@ Bardo.sanctify = function(schema: Schema, ...): (buffer?, { any? }?)
 			size += Bardo.getSize(args[index], bardoType)
 		end
 	else
-		size = schema.size
+		local shouldRecalculate = false
+		for _, bardoType in ipairs(schema) do
+			if
+				bardoType == Bardo.string8
+				or bardoType == Bardo.string16
+				or bardoType == Bardo.buffer8
+				or bardoType == Bardo.buffer16
+			then
+				shouldRecalculate = true
+				break
+			end
+		end
+		if shouldRecalculate then
+			for index, bardoType in ipairs(schema) do
+				size += Bardo.getSize(args[index], bardoType)
+			end
+		else
+			size = schema.size
+		end
 	end
 
 	if size == 0 then
-		warn(`[{script.Name}]: could not sanctify anything.`)
+		--warn(`[{script.Name}]: could not sanctify anything.`)
 		return ...
 	end
 
@@ -836,7 +918,6 @@ Bardo.sanctify = function(schema: Schema, ...): (buffer?, { any? }?)
 		b = encodedb
 		flag = 0xFF
 	else
-		b = b
 		flag = 0x00
 	end
 
@@ -850,8 +931,8 @@ Bardo.sanctify = function(schema: Schema, ...): (buffer?, { any? }?)
 end
 
 Bardo.reborn = function(schema: Schema, b: buffer, ...): ...any
-	if schema.size == 0 or typeof(b) ~= "buffer" then
-		warn(`[{script.Name}]: Could not reborn buffer, schema size is zero and no buffer is specified`)
+	if not schema or schema.size == 0 or typeof(b) ~= "buffer" then
+		--warn(`[{script.Name}]: Could not reborn buffer, schema size is zero and no buffer is specified`)
 		return b, ...
 	end
 	local encodedFlag = ru8(b, 0)
