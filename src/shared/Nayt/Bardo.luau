@@ -6,11 +6,13 @@ local EncodingService = game:GetService("EncodingService")
 local Bardo = {}
 
 export type BardoType = {
-	size: number,
+	get_size: (any) -> number,
 	sanctify: (b: buffer, offset: number, value: any) -> number,
-	reborn: (b: buffer, offset: number) -> (any, number),
+	reborn: (b: buffer, offset: number, schema: { BardoType }?) -> (any, number),
 }
 export type Schema = { BardoType } & { size: number }
+
+local COMPRESSION_LEVEL = 9 --(BETWEEN 1 AND 22)
 
 local U8_MAX = 255
 local I8_MIN = -128
@@ -62,7 +64,7 @@ local function i16ToFloat(i: number): number
 	return i / I16_MAX
 end
 
-local function CompressQuaternion(cf: CFrame): (number, number, number, number)
+local function CompressQuaternion(cf: CFrame): (number, number, number, number) --gimbal lock <3
 	local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
 
 	local trace = r00 + r11 + r22
@@ -203,7 +205,9 @@ local function isAxisAligned(cf: CFrame): boolean
 end
 
 Bardo.uint8 = {
-	size = 1,
+	get_size = function()
+		return 1
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(value < U8_MAX, `Expected number smaller than {U8_MAX}, got {value}`)
@@ -217,7 +221,9 @@ Bardo.uint8 = {
 }
 
 Bardo.int8 = {
-	size = 1,
+	get_size = function()
+		return 1
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(inRange(value, I8_MIN, I8_MAX), `Expected to number to be in range ({I8_MIN} < {value} < {I8_MAX})`)
@@ -231,7 +237,9 @@ Bardo.int8 = {
 }
 
 Bardo.uint16 = {
-	size = 2,
+	get_size = function()
+		return 2
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(value < U16_MAX, `Expected number smaller than {U16_MAX}, got {value}`)
@@ -245,7 +253,9 @@ Bardo.uint16 = {
 }
 
 Bardo.int16 = {
-	size = 2,
+	get_size = function()
+		return 2
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(inRange(value, I16_MIN, I16_MAX), `Expected to number to be in range ({I16_MIN} < {value} < {I16_MAX})`)
@@ -259,7 +269,9 @@ Bardo.int16 = {
 }
 
 Bardo.uint32 = {
-	size = 4,
+	get_size = function()
+		return 4
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(value < U32_MAX, `Expected number smaller than {U32_MAX}, got {value}`)
@@ -273,7 +285,9 @@ Bardo.uint32 = {
 }
 
 Bardo.int32 = {
-	size = 4,
+	get_size = function()
+		return 4
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(inRange(value, I32_MIN, I32_MAX), `Expected to number to be in range ({I32_MIN} < {value} < {I32_MAX})`)
@@ -287,7 +301,9 @@ Bardo.int32 = {
 }
 
 Bardo.float32 = {
-	size = 4,
+	get_size = function()
+		return 4
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		wf32(b, offset, value)
@@ -300,7 +316,9 @@ Bardo.float32 = {
 }
 
 Bardo.float64 = {
-	size = 8,
+	get_size = function()
+		return 8
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		wf64(b, offset, value)
@@ -313,7 +331,9 @@ Bardo.float64 = {
 }
 
 Bardo.LosslessCFrame = {
-	size = 25,
+	get_size = function()
+		return 25
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: CFrame): number
 		wf32(b, offset, value.X)
@@ -346,7 +366,9 @@ Bardo.LosslessCFrame = {
 }
 
 Bardo.CFrame = {
-	size = 19,
+	get_size = function()
+		return 19
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: CFrame): number
 		wf32(b, offset, value.X)
@@ -380,7 +402,9 @@ Bardo.CFrame = {
 }
 
 Bardo.AxisAlignedCFrame = {
-	size = 13,
+	get_size = function()
+		return 13
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: CFrame): number
 		assert(
@@ -404,7 +428,9 @@ Bardo.AxisAlignedCFrame = {
 }
 
 Bardo.Color3 = {
-	size = 3,
+	get_size = function()
+		return 3
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: Color3): number
 		wu8(b, offset, value.R * 255)
@@ -420,7 +446,9 @@ Bardo.Color3 = {
 }
 
 Bardo.string8 = {
-	size = 1, --Depends on the string lengths
+	get_size = function(value: string)
+		return value:len() + 1
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: string): number
 		local len = value:len()
@@ -440,7 +468,9 @@ Bardo.string8 = {
 }
 
 Bardo.string16 = {
-	size = 2, --Depends on the string lengths
+	get_size = function(value: string)
+		return value:len() + 2
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: string): number
 		local len = value:len()
@@ -460,7 +490,9 @@ Bardo.string16 = {
 }
 
 Bardo.Vector3 = {
-	size = 12,
+	get_size = function()
+		return 12
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: Vector3): number
 		wf32(b, offset, value.X)
@@ -475,7 +507,9 @@ Bardo.Vector3 = {
 }
 
 Bardo.Vector2 = {
-	size = 8,
+	get_size = function()
+		return 8
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: Vector2): number
 		wf32(b, offset, value.X)
@@ -489,7 +523,9 @@ Bardo.Vector2 = {
 }
 
 Bardo.Boolean = {
-	size = 1,
+	get_size = function()
+		return 1
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: boolean): number
 		wu8(b, offset, value and 0xFF or 0x00)
@@ -502,7 +538,9 @@ Bardo.Boolean = {
 }
 
 Bardo.buffer8 = {
-	size = 1,
+	get_size = function(value: buffer)
+		return buffer.len(value) + 1
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: buffer): number
 		local len = buffer.len(value)
@@ -522,7 +560,9 @@ Bardo.buffer8 = {
 }
 
 Bardo.buffer16 = {
-	size = 2,
+	get_size = function(value: buffer)
+		return buffer.len(value) + 2
+	end,
 	sanctify = function(b: buffer, offset: number, value: buffer): number
 		local len = buffer.len(value)
 		assert(len < U16_MAX, `Expected buffer size to be under {U16_MAX}, got {len}.`)
@@ -541,7 +581,9 @@ Bardo.buffer16 = {
 }
 
 Bardo.uint24 = {
-	size = 3,
+	get_size = function()
+		return 3
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(value < U24_MAX, `Expected number smaller than {U24_MAX}, got {value}`)
@@ -562,7 +604,9 @@ Bardo.uint24 = {
 }
 
 Bardo.int24 = {
-	size = 3,
+	get_size = function()
+		return 3
+	end,
 
 	sanctify = function(b: buffer, offset: number, value: number): number
 		assert(inRange(value, I24_MIN, I24_MAX), `Expected number in range ({I24_MIN} < {value} < {I24_MAX})`)
@@ -588,17 +632,50 @@ Bardo.int24 = {
 	end,
 }
 
-Bardo.Unserializable = {
-	size = 0,
+Bardo.array = {
+	get_size = function(array: { any })
+		local size = 2 --max array size of 65_535
+		local arraySize = #array
+		for i = 1, arraySize do
+			size += Bardo.autoSize(array[i])
+		end
+		size += arraySize
+		return size
+	end,
+
+	sanctify = function(b: buffer, offset: number, array: { any }): number
+		local size = #array
+		wu16(b, offset, size)
+		offset += 2
+		for _, v in ipairs(array) do
+			local bardoType = Bardo.auto(v)
+			wu8(b, offset, Bardo.TYPE_MAP[bardoType])
+			offset += 1
+			offset = bardoType.sanctify(b, offset, v)
+		end
+
+		return offset
+	end,
+
+	reborn = function(b: buffer, offset: number): ({ any }, number)
+		local size = ru16(b, offset)
+		local array = table.create(size)
+
+		offset += 2
+		for i = 1, size do
+			local bardoType = Bardo.TYPE_MAP[ru8(b, offset)]
+			offset += 1
+			array[i], offset = bardoType.reborn(b, offset)
+		end
+
+		return array, offset
+	end,
 }
 
-local TYPE_HIERARCHY = {
-	uint = { Bardo.uint8, Bardo.uint16, Bardo.uint24, Bardo.uint32 },
-	int = { Bardo.int8, Bardo.int16, Bardo.int24, Bardo.int32 },
-	float = { Bardo.float32, Bardo.float64 },
-	string = { Bardo.string8, Bardo.string16 },
-	buffer = { Bardo.buffer8, Bardo.buffer16 },
-	cframe = { Bardo.AxisAlignedCFrame, Bardo.CFrame, Bardo.LosslessCFrame },
+Bardo.Unserializable = {
+	get_size = function()
+		return 0
+	end,
 }
 
 --ugly but necessary for O(1)
@@ -624,17 +701,27 @@ local _TYPE_PAIRS: { { number | BardoType } } = {
 	{ 19, Bardo.buffer16 },
 	{ 20, Bardo.uint24 },
 	{ 21, Bardo.int24 },
-	{ 22, Bardo.Unserializable },
+	{ 22, Bardo.array },
+	{ 23, Bardo.Unserializable },
 }
 
-local _TYPE_MAP = {}
+Bardo.TYPE_MAP = {}
 for _, pair in ipairs(_TYPE_PAIRS) do
 	local id, Type = pair[1], pair[2]
-	_TYPE_MAP[id] = Type
-	_TYPE_MAP[Type] = id
+	Bardo.TYPE_MAP[id] = Type
+	Bardo.TYPE_MAP[Type] = id
 end
 
 _TYPE_PAIRS = nil
+
+local TYPE_HIERARCHY = {
+	uint = { Bardo.uint8, Bardo.uint16, Bardo.uint24, Bardo.uint32 },
+	int = { Bardo.int8, Bardo.int16, Bardo.int24, Bardo.int32 },
+	float = { Bardo.float32, Bardo.float64 },
+	string = { Bardo.string8, Bardo.string16 },
+	buffer = { Bardo.buffer8, Bardo.buffer16 },
+	cframe = { Bardo.AxisAlignedCFrame, Bardo.CFrame, Bardo.LosslessCFrame },
+}
 
 Bardo.auto = function(value: any): BardoType
 	local t = typeof(value)
@@ -812,25 +899,15 @@ Bardo.tryConvertType = function(targetType: BardoType, valueType: BardoType, val
 	return nil
 end
 
-Bardo.getSize = function(value: any, bardoType: BardoType): number
-	if bardoType == Bardo.string8 or bardoType == Bardo.string16 then
-		return bardoType.size + value:len()
-	elseif bardoType == Bardo.buffer8 or bardoType == Bardo.buffer16 then
-		return bardoType.size + buffer.len(value)
-	else
-		return bardoType.size
-	end
-end
-
 Bardo.autoSize = function(value: any): number
 	local bardoType = Bardo.auto(value)
-	return Bardo.getSize(value, bardoType)
+	return bardoType.get_size(value)
 end
 
 Bardo.sanctifySchema = function(bardoTypes: Schema): buffer
 	local b = buffer.create(#bardoTypes)
 	for index, Type in ipairs(bardoTypes) do
-		wu8(b, index - 1, _TYPE_MAP[Type])
+		wu8(b, index - 1, Bardo.TYPE_MAP[Type])
 	end
 	return b
 end
@@ -848,8 +925,8 @@ Bardo.rebornSchema = function(b: buffer): Schema
 	local bardoTypes = {}
 	bardoTypes.size = 0
 	for index = 1, buffer.len(b) do
-		bardoTypes.size += _TYPE_MAP[ru8(b, index - 1)].size
-		bardoTypes[index] = _TYPE_MAP[ru8(b, index - 1)]
+		bardoTypes.size += Bardo.TYPE_MAP[ru8(b, index - 1)].size
+		bardoTypes[index] = Bardo.TYPE_MAP[ru8(b, index - 1)]
 	end
 	return bardoTypes
 end
@@ -859,7 +936,8 @@ Bardo.autoSchema = function(...): Schema
 	r.size = 0
 	for _, v in { ... } do
 		local bardoType = Bardo.auto(v)
-		r.size += Bardo.getSize(v, bardoType)
+
+		r.size += bardoType.get_size(v)
 		table.insert(r, bardoType)
 	end
 	return r
@@ -870,7 +948,7 @@ Bardo.sanctify = function(schema: Schema, ...): (buffer?, { any? }?)
 	local size = 0
 	if not schema.size then
 		for index, bardoType in ipairs(schema) do
-			size += Bardo.getSize(args[index], bardoType)
+			size += bardoType.get_size(args[index])
 		end
 	else
 		local shouldRecalculate = false
@@ -910,7 +988,7 @@ Bardo.sanctify = function(schema: Schema, ...): (buffer?, { any? }?)
 		end
 	end
 
-	local encodedb = EncodingService:CompressBuffer(b, Enum.CompressionAlgorithm.Zstd, 9)
+	local encodedb = EncodingService:CompressBuffer(b, Enum.CompressionAlgorithm.Zstd, COMPRESSION_LEVEL)
 	local useEncoded = buffer.len(encodedb) < buffer.len(b)
 	local flag: number
 
@@ -956,7 +1034,7 @@ Bardo.reborn = function(schema: Schema, b: buffer, ...): ...any
 			data = unserializedArgs[tCount]
 			tCount += 1
 		else
-			data, offset = serialized.reborn(b, offset)
+			data, offset = serialized.reborn(b, offset, schema)
 		end
 		ret[index] = data
 	end
