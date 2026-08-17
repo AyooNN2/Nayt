@@ -24,7 +24,7 @@ export type NaytPort<T...> = {
 }
 
 type Nayt = {
-	new: (portId: string, Secure: boolean?, AutoUpdate: boolean?, schema: { Bardo.BardoType }?) -> NaytPort<...any?>,
+	new: (portId: string, schema: { Bardo.BardoType }?, config: { Secure: boolean? }?) -> NaytPort<...any?>,
 }
 
 local Nayt = {} :: Nayt
@@ -32,7 +32,7 @@ local NaytPorts: { [string]: NaytPort<...any?> } = {}
 
 Nayt.__index = Nayt
 
-local function getn(t: { [any?]: any? }): number
+const function getn(t: { [any?]: any? }): number
 	local n = 0
 	for _ in t do
 		n += 1
@@ -40,7 +40,7 @@ local function getn(t: { [any?]: any? }): number
 	return n
 end
 
-local function equal(t1: { [any]: any }, t2: { [any]: any }): boolean
+const function equal(t1: { [any]: any }, t2: { [any]: any }): boolean
 	if t1 == t2 then
 		return true
 	end
@@ -56,7 +56,7 @@ local function equal(t1: { [any]: any }, t2: { [any]: any }): boolean
 	return getn(t1) == getn(t2)
 end
 
-local function getArgsType(...): { string }
+const function getArgsType(...): { string }
 	local t = { ... }
 	for i, var in t do
 		t[i] = typeof(var)
@@ -65,90 +65,53 @@ local function getArgsType(...): { string }
 end
 
 function Nayt:_serialize(player: Player?, ...): (buffer?, { any? }?)
-	local argsType = getArgsType(...)
 	local isServer = RunContext == "Server"
-	local argsTypeChanged = not equal(self.argsType, argsType)
-	local schemaUpdated = false
-	local newSchema = Bardo.autoSchema(...)
 
-	if #self.argsType == 0 then
-		local shouldInit = (isServer and self.autoUpdate) or (not isServer and not self.autoUpdate)
-		if shouldInit then
-			self.schema = newSchema
-			schemaUpdated = true
+	if not self.fixedSchema then
+		local newSchema = Bardo.autoSchema(...)
+		local argsType = getArgsType(...)
+		local schemaChanged = not equal(self.argsType, argsType)
+		if self.secure and next(self.schema) and schemaChanged then
+			for i, newType in newSchema do
+				if i ~= "size" and self.schema[i] then
+					assert(
+						Bardo.tryConvertType(self.schema[i], newType, select(i, ...)),
+						`Schema mismatch on port '{self.portId}': arg {i} requires {Bardo.getTypeName(self.schema[i])} but got {Bardo.getTypeName(
+							newType
+						)}`
+					)
+				end
+			end
 		end
+
+		if schemaChanged and isServer then
+			self.updatedPlayers = {}
+		end
+
+		self.schema = newSchema
 		self.argsType = argsType
-	elseif argsTypeChanged then
-		if self.autoUpdate then
-			if isServer and self.secure then
-				self.schema = newSchema
-				self.argsType = argsType
-				self.updatedPlayers = {}
-				self.updatedPlayers[player] = true
-				schemaUpdated = true
-			elseif not isServer and self.secure then
-				if self.secure then
-					error(`Incorrect arguments for port '{self.portId}', will not send to server.`)
-				end
-				self.schema = newSchema
-				self.argsType = argsType
-				schemaUpdated = true
-			end
-		else
-			self.schema = newSchema
-			self.argsType = argsType
-			schemaUpdated = true
-		end
-	else
-		local schemaDiffers = not equal(self.schema, newSchema)
-
-		if schemaDiffers then
-			if self.autoUpdate and isServer then
-				self.schema = newSchema
-				self.updatedPlayers = {}
-				self.updatedPlayers[player] = true
-				schemaUpdated = true
-			elseif not self.autoUpdate and not isServer then
-				self.schema = newSchema
-				self.argsType = argsType
-			elseif not isServer and self.secure then
-				for i, newType in newSchema do
-					--Combining 2 if statements to reduce end-staircase
-					if (i ~= "size" and self.schema[i]) and (self.autoUpdate and not isServer) then
-						assert(
-							Bardo.tryConvertType(self.schema[i], newType, select(i, ...)),
-							`Schema mismatch for port '{self.portId}': argument {i} requires {Bardo.getTypeName(
-								self.schema[i]
-							)} but detected {Bardo.getTypeName(newType)}. Value could not fit in the current schema`
-						)
-					end
-				end
-			end
-		end
 	end
 
-	local result = { Bardo.sanctify(self.schema, ...) }
+	local buff, unserializable = Bardo.sanctify(self.schema, ...)
+	if typeof(buff) ~= "buffer" then
+		return buff
+	end
 
-	local shouldSendSchema = false
-	if isServer then
-		shouldSendSchema = schemaUpdated or not self.updatedPlayers[player]
+	local shouldSendSchema
+	if self.fixedSchema then
+		shouldSendSchema = false
+	elseif isServer then
+		shouldSendSchema = not self.updatedPlayers[player]
 		if shouldSendSchema then
 			self.updatedPlayers[player] = true
 		end
 	else
-		shouldSendSchema = not self.autoUpdate
+		shouldSendSchema = true
 	end
 
-	if typeof(result[1]) ~= "buffer" then
-		if shouldSendSchema then
-			table.insert(result, Bardo.sanctifySchema(self.schema))
-		end
-		return unpack(result)
-	end
-
-	local unserializedValues = table.remove(result, 2) :: { any }
-	if unserializedValues then
-		for _, value in unserializedValues do
+	local result = { buff }
+	if unserializable then
+		for _, value in unserializable do
 			table.insert(result, value)
 		end
 	end
@@ -169,45 +132,46 @@ function Nayt:_deserialize(...): { [string]: any } | any?
 		return Bardo.reborn(self.schema, buff, select(2, ...))
 	end
 
-	local newSchema = table.remove(args, #args) :: buffer
-	local isClient = RunContext == "Client"
-
-	if not isClient and self.autoUpdate then
-		error(`Player tried to change server's schema.`)
+	if RunContext == "Server" and self.fixedSchema then
+		if self.secure then
+			error(`[{self.portId}]: Client did not respect fixed schema, declined.`)
+		end
+		warn(`[{self.portId}]: Client did not respect fixed schema, accepted. (port's security is off)`)
 	end
 
-	if isClient and self.autoUpdate then
-		local schema = Bardo.rebornSchema(newSchema)
+	local schemaBuffer = table.remove(args, #args) :: buffer
+	local schema = Bardo.rebornSchema(schemaBuffer)
+
+	if RunContext == "Client" then
+		if self.fixedSchema then
+			if self.secure then
+				error(`[{self.portId}]: Server did not respect fixed schema, declined.`)
+			end
+			warn(`[{self.portId}]: Server did not respect fixed schema, accepted. (port's security is off)`)
+		end
 		self.schema = schema
+
 		self.argsType = {}
 
 		for i, bardoType in schema do
 			if i ~= "size" then
-				table.insert(self.argsType, Bardo.getLuaType(bardoType))
+				table.insert(self.argsType, bardoType.type())
 			end
 		end
-
-		return Bardo.reborn(schema, buff, unpack(args))
 	end
 
-	local schema = Bardo.rebornSchema(newSchema)
 	return Bardo.reborn(schema, buff, unpack(args))
 end
 
-function Nayt:_send(player: Player?, safe: boolean, ...: any?): ()
+function Nayt:_send(player: Player?, safe: boolean, ...: any?)
+	local serialized = { self:_serialize(player, ...) }
 	if RunContext == "Server" then
 		assert(player ~= nil, `[{self.portId}]: Player was not specified`)
-		if safe then
-			Net.Server.SendAsync(player :: Player, self.portId, self:_serialize(player, ...))
-		else
-			Net.Server.SendUnsafeAsync(player :: Player, self.portId, self:_serialize(player, ...))
-		end
+		local sendFn = safe and Net.Server.SendAsync or Net.Server.SendUnsafeAsync
+		sendFn(player :: Player, self.portId, table.unpack(serialized))
 	else
-		if safe then
-			Net.Client.SendAsync(self.portId, self:_serialize(nil, ...))
-		else
-			Net.Client.SendUnsafeAsync(self.portId, self:_serialize(nil, ...))
-		end
+		local sendFn = safe and Net.Client.SendAsync or Net.Client.SendUnsafeAsync
+		sendFn(self.portId, table.unpack(serialized))
 	end
 end
 
@@ -295,6 +259,10 @@ function Nayt:Request(...): ...any?
 end
 
 Players.PlayerRemoving:Connect(function(player: Player)
+	if RunContext == "Client" then
+		return
+	end
+
 	for _, naytPort in NaytPorts do
 		if naytPort.updatedPlayers[player] then
 			naytPort.updatedPlayers[player] = nil
@@ -302,22 +270,22 @@ Players.PlayerRemoving:Connect(function(player: Player)
 	end
 end)
 
-function Nayt.new(portId: string, Secure: boolean?, AutoUpdate: boolean?, schema: { Bardo.BardoType }?)
+function Nayt.new(portId: string, schema: { Bardo.BardoType }?, config: { Secure: boolean? }?)
 	local argsType = {}
 
 	if schema then
 		for i, v in schema do
-			argsType[i] = Bardo.getLuaType(v)
+			argsType[i] = v.type()
 		end
 	end
 
 	local self = setmetatable({
 		portId = portId,
-		autoUpdate = AutoUpdate ~= false,
-		secure = Secure ~= false,
+		secure = if config then config.Secure ~= false else false,
+		fixedSchema = schema or nil,
 		schema = schema or {},
 		argsType = argsType,
-		updatedPlayers = RunContext == "Server" and {} or nil,
+		updatedPlayers = if RunContext == "Server" and not schema then {} else nil,
 	}, Nayt)
 
 	NaytPorts[portId] = self

@@ -70,9 +70,7 @@ end
 
 local function _sendAsync(player: Player?, portId: string, ...: any?): ()
 	if RunService:IsClient() then
-		remoteEvent.Parent = script
 		remoteEvent:FireServer(portId, ...)
-		remoteEvent.Parent = nil
 	else
 		remoteEvent:FireClient(player :: Player, portId, ...)
 	end
@@ -80,9 +78,7 @@ end
 
 local function _sendUnsafeAsync(player: Player?, portId: string, ...: any?): ()
 	if RunService:IsClient() then
-		unreliableRemoteEvent.Parent = script
 		unreliableRemoteEvent:FireServer(portId, ...)
-		unreliableRemoteEvent.Parent = nil
 	else
 		unreliableRemoteEvent:FireClient(player :: Player, portId, ...)
 	end
@@ -95,7 +91,6 @@ local function _request(player: Player?, portId: string, timeout: number?, ...: 
 
 	task.spawn(function(...)
 		if RunContext == "Client" then
-			remoteFunc.Parent = script
 			args = { remoteFunc:InvokeServer(portId, ...) }
 		else
 			args = { remoteFunc:InvokeClient(player :: Player, portId, ...) }
@@ -104,9 +99,6 @@ local function _request(player: Player?, portId: string, timeout: number?, ...: 
 	local t0 = os.clock()
 	while timeout > os.clock() - t0 do
 		if args then
-			if RunContext == "Client" then
-				remoteFunc.Parent = nil
-			end
 			return unpack(args)
 		end
 		task.wait()
@@ -136,10 +128,6 @@ if isClient then
 	remoteFunc.OnClientInvoke = HandleInvocation
 	remoteEvent.OnClientEvent:Connect(HandleRemoteFired)
 	unreliableRemoteEvent.OnClientEvent:Connect(HandleRemoteFired)
-
-	--unreliableRemoteEvent.Parent = nil
-	--remoteEvent.Parent = nil
-	--remoteFunc.Parent = nil
 else
 	Net.Server.Request = function(player: Player, portId: string, timeout: number?, ...: any?): ...any?
 		return _request(player, portId, timeout, ...)
